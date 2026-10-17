@@ -428,6 +428,7 @@ function FeedRowView({
       setReplyDraft("");
       writeReplyDraft(row.id, "");
       setReplyOpen(false);
+      collapseDisclosure();
     } catch (cause) {
       setReplyError(boundedError(cause));
     } finally {
@@ -458,6 +459,11 @@ function FeedRowView({
   }, [expanded, fingerprint, row.id]);
   const toggleDisclosure = () => {
     const next = { expanded: !expanded, fingerprint };
+    setDisclosure(next);
+    writeRowDisclosure(row.id, next);
+  };
+  const collapseDisclosure = () => {
+    const next = { expanded: false, fingerprint };
     setDisclosure(next);
     writeRowDisclosure(row.id, next);
   };
