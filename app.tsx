@@ -43,6 +43,9 @@ type LoadState =
 
 type SortOrder = "newest" | "oldest";
 
+// BB unmounts the panel when the thread is hidden; this module stays loaded, so a remount shows the last snapshot.
+const snapshotCache = new Map<string, Snapshot>();
+
 function readSortOrder(): SortOrder {
   try {
     return window.localStorage.getItem(SORT_STORAGE_KEY) === "oldest"
@@ -131,8 +134,15 @@ function StateBox({ children }: { children: ReactNode }) {
 
 function useQueueSnapshot(threadId: string, sectionIds: readonly string[]) {
   const rpc = useRpc<typeof rpcContract>();
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [state, setState] = useState<LoadState>(() => {
+    const cached = snapshotCache.get(threadId);
+    return cached ? { status: "ready", snapshot: cached } : { status: "loading" };
+  });
   const requestSequence = useRef(0);
+
+  useEffect(() => {
+    if (state.status === "ready") snapshotCache.set(threadId, state.snapshot);
+  }, [state, threadId]);
 
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
