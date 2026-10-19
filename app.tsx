@@ -773,14 +773,58 @@ function FeedPanelContent({
       setMutation(null);
     }
   };
-  const setPaused = (row: FeedRow) =>
-    mutate(row, () =>
-      rpc.call("setPaused", {
+  const updateRows = (update: (rows: FeedRow[]) => FeedRow[]) =>
+    setState((current) =>
+      current.status !== "ready"
+        ? current
+        : {
+            status: "ready",
+            snapshot: { ...current.snapshot, rows: update(current.snapshot.rows) },
+          },
+    );
+  const replaceRow = (next: FeedRow) =>
+    updateRows((rows) =>
+      rows.map((candidate) => (candidate.id === next.id ? next : candidate)),
+    );
+  // Pause and Archive change the row at once; a failed call puts the row back and shows the error.
+  const setPaused = async (row: FeedRow) => {
+    if (mutation !== null) return;
+    const paused = !row.paused;
+    supersedeRefresh();
+    setMutation(row.id);
+    setMutationError(null);
+    replaceRow({
+      ...row,
+      paused,
+      section: paused
+        ? "paused"
+        : row.state === "needs_response" ||
+            row.state === "error" ||
+            row.state === "queued_failed"
+          ? "needs_response"
+          : "in_progress",
+      statusLabel:
+        row.state === "with_manager"
+          ? paused
+            ? "Idle"
+            : "With manager"
+          : row.statusLabel,
+    });
+    try {
+      await rpc.call("setPaused", {
         surfaceThreadId: threadId,
         threadId: row.id,
-        paused: !row.paused,
-      }),
-    );
+        paused,
+      });
+    } catch (cause) {
+      supersedeRefresh();
+      replaceRow(row);
+      setMutationError(boundedError(cause));
+    } finally {
+      setMutation(null);
+    }
+    void refresh();
+  };
   const detach = (row: FeedRow) =>
     mutate(row, () =>
       rpc.call("detach", { surfaceThreadId: threadId, threadId: row.id }),
@@ -827,21 +871,19 @@ function FeedPanelContent({
     supersedeRefresh();
     setMutation(row.id);
     setMutationError(null);
-    setState({
-      status: "ready",
-      snapshot: {
-        ...snapshot,
-        rows: snapshot.rows.filter((candidate) => candidate.id !== row.id),
-      },
-    });
+    updateRows((rows) => rows.filter((candidate) => candidate.id !== row.id));
     try {
       await rpc.call("archiveThread", {
         surfaceThreadId: threadId,
         threadId: row.id,
       });
     } catch (cause) {
+      supersedeRefresh();
+      updateRows((rows) =>
+        rows.some((candidate) => candidate.id === row.id) ? rows : [...rows, row],
+      );
       setMutationError(boundedError(cause));
-      await refresh();
+      void refresh();
     } finally {
       setMutation(null);
     }
