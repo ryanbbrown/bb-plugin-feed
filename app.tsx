@@ -798,7 +798,29 @@ function FeedPanelContent({
         ? text
         : `[Re: ${JSON.stringify(row.oneLine)}]\n\n${text}`,
     });
-    await refresh();
+    // The row moves to In progress at once; the refresh confirms it in the background.
+    supersedeRefresh();
+    setState((current) =>
+      current.status !== "ready"
+        ? current
+        : {
+            status: "ready",
+            snapshot: {
+              ...current.snapshot,
+              rows: current.snapshot.rows.map((candidate) =>
+                candidate.id !== row.id || candidate.paused
+                  ? candidate
+                  : {
+                      ...candidate,
+                      section: "in_progress",
+                      state: "running",
+                      statusLabel: "Active",
+                    },
+              ),
+            },
+          },
+    );
+    void refresh();
   };
   const archive = async (row: FeedRow) => {
     if (mutation !== null) return;
