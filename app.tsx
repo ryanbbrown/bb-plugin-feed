@@ -760,19 +760,6 @@ function FeedPanelContent({
   }
 
   const { snapshot } = state;
-  const mutate = async (row: FeedRow, action: () => Promise<unknown>) => {
-    if (mutation !== null) return;
-    setMutation(row.id);
-    setMutationError(null);
-    try {
-      await action();
-      await refresh();
-    } catch (cause) {
-      setMutationError(boundedError(cause));
-    } finally {
-      setMutation(null);
-    }
-  };
   const updateRows = (update: (rows: FeedRow[]) => FeedRow[]) =>
     setState((current) =>
       current.status !== "ready"
@@ -786,36 +773,19 @@ function FeedPanelContent({
     updateRows((rows) =>
       rows.map((candidate) => (candidate.id === next.id ? next : candidate)),
     );
-  // Pause and Archive change the row at once; a failed call puts the row back and shows the error.
-  const setPaused = async (row: FeedRow) => {
+  // Row actions change the row at once; a failed call puts the row back and shows the error.
+  const mutate = async (
+    row: FeedRow,
+    next: FeedRow,
+    action: () => Promise<unknown>,
+  ) => {
     if (mutation !== null) return;
-    const paused = !row.paused;
     supersedeRefresh();
     setMutation(row.id);
     setMutationError(null);
-    replaceRow({
-      ...row,
-      paused,
-      section: paused
-        ? "paused"
-        : row.state === "needs_response" ||
-            row.state === "error" ||
-            row.state === "queued_failed"
-          ? "needs_response"
-          : "in_progress",
-      statusLabel:
-        row.state === "with_manager"
-          ? paused
-            ? "Idle"
-            : "With manager"
-          : row.statusLabel,
-    });
+    replaceRow(next);
     try {
-      await rpc.call("setPaused", {
-        surfaceThreadId: threadId,
-        threadId: row.id,
-        paused,
-      });
+      await action();
     } catch (cause) {
       supersedeRefresh();
       replaceRow(row);
@@ -825,12 +795,55 @@ function FeedPanelContent({
     }
     void refresh();
   };
+  const setPaused = (row: FeedRow) => {
+    const paused = !row.paused;
+    return mutate(
+      row,
+      {
+        ...row,
+        paused,
+        section: paused
+          ? "paused"
+          : row.state === "needs_response" ||
+              row.state === "error" ||
+              row.state === "queued_failed"
+            ? "needs_response"
+            : "in_progress",
+        statusLabel:
+          row.state === "with_manager"
+            ? paused
+              ? "Idle"
+              : "With manager"
+            : row.statusLabel,
+      },
+      () =>
+        rpc.call("setPaused", {
+          surfaceThreadId: threadId,
+          threadId: row.id,
+          paused,
+        }),
+    );
+  };
+  // A detached child becomes a starred root, and a root has no "With manager" state.
   const detach = (row: FeedRow) =>
-    mutate(row, () =>
-      rpc.call("detach", { surfaceThreadId: threadId, threadId: row.id }),
+    mutate(
+      row,
+      {
+        ...row,
+        starred: true,
+        managedChild: false,
+        ...(row.state === "with_manager"
+          ? {
+              section: row.paused ? "paused" : "needs_response",
+              state: "needs_response",
+              statusLabel: "Idle",
+            }
+          : {}),
+      },
+      () => rpc.call("detach", { surfaceThreadId: threadId, threadId: row.id }),
     );
   const moveSection = (row: FeedRow) =>
-    mutate(row, () =>
+    mutate(row, { ...row, starred: !row.starred }, () =>
       rpc.call("moveSection", { surfaceThreadId: threadId, threadId: row.id }),
     );
   // R21a: the reply quotes the line the user saw.
