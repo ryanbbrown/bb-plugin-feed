@@ -338,6 +338,7 @@ export default async function plugin(bb: BbPluginApi) {
             (event.changes.includes("terminals-changed") ||
               event.changes.includes("title-changed") ||
               event.changes.includes("order-changed") ||
+              event.changes.includes("interactions-changed") ||
               event.metadata?.backgroundActivityChanged === true)
           ) {
             inBackground(() => publishOwningRow(threadId, "thread-changed"));

@@ -30,6 +30,7 @@ function row(overrides: Partial<QueueRow> = {}): QueueRow {
     starred: false,
     managedChild: true,
     paused: false,
+    parentTitle: null,
     latestCompletionSeq: 7,
     answeredAt: 1_767_355_445_000,
     ...overrides,

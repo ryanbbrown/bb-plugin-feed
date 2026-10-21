@@ -30,6 +30,10 @@ export interface ThreadFacts {
   /** Title of a running or starting terminal on a descendant, at any depth. */
   descendantTerminalTitle: string | null;
   hasDescendantBackgroundWork: boolean;
+  /** The agent is blocked on the user: an approval, a question, or a form. */
+  hasPendingInteraction: boolean;
+  /** Set on a nested thread shown because it waits on the user. */
+  parentTitle: string | null;
 }
 
 export interface RowAnnotations {
@@ -108,6 +112,13 @@ type Placement = Pick<FeedRow, "section" | "state" | "statusLabel">;
 function place(facts: ThreadFacts, markSeq: number | null): Placement {
   const status = parseStatus(facts.status);
   const queuedWork = parseQueuedWork(facts.queuedWork);
+  if (facts.hasPendingInteraction) {
+    return {
+      section: "needs_response",
+      state: "needs_response",
+      statusLabel: "Waiting for you",
+    };
+  }
   if (status === "error") {
     return { section: "needs_response", state: "error", statusLabel: "Failed" };
   }
@@ -178,7 +189,11 @@ export function projectThread(
   return {
     id: facts.id,
     title: facts.title,
-    section: annotations.paused ? "paused" : placement.section,
+    // A thread that waits on the user leaves Paused.
+    section:
+      annotations.paused && !facts.hasPendingInteraction
+        ? "paused"
+        : placement.section,
     state: placement.state,
     // A paused row shows the live BB status; "With manager" is not one.
     statusLabel:
@@ -190,6 +205,7 @@ export function projectThread(
     starred: facts.inUserManagedSection,
     managedChild: facts.managedChild,
     paused: annotations.paused,
+    parentTitle: facts.parentTitle,
     latestCompletionSeq: facts.latestCompletionSeq,
     answeredAt: facts.answeredAt,
   };

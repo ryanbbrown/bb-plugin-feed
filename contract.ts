@@ -28,6 +28,8 @@ export const feedRowSchema = z
     starred: z.boolean(),
     managedChild: z.boolean(),
     paused: z.boolean(),
+    /** Set on a nested thread that waits on the user: the title of its parent thread. */
+    parentTitle: z.string().nullable(),
     latestCompletionSeq: z.number().int().nonnegative(),
     answeredAt: z.number().int().nonnegative(),
   })

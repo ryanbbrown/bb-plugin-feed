@@ -90,6 +90,7 @@ function formatFullTime(timestamp: number): string {
 }
 
 function rowLineText(row: FeedRow): string {
+  if (row.parentTitle !== null) return `Waits for you, under ${row.parentTitle}`;
   if (row.summarizing) return "Summarizing…";
   return row.oneLine ?? "No result yet";
 }
@@ -398,6 +399,8 @@ function FeedRowView({
   const replyHintId = `${replyId}-hint`;
   const replyErrorId = `${replyId}-error`;
   const busy = mutation !== null || replySending;
+  // A nested row only links to its thread: the server acts on Feed threads only.
+  const nested = row.parentTitle !== null;
   useEffect(() => {
     if (replyOpen && !restoredReplyOpen.current) replyInputRef.current?.focus();
     restoredReplyOpen.current = false;
@@ -498,6 +501,7 @@ function FeedRowView({
           <PersonIcon />
           <span className="min-w-0 truncate">{row.title}</span>
         </button>
+        {nested ? null : (
         <button
           type="button"
           disabled={busy}
@@ -509,6 +513,7 @@ function FeedRowView({
         >
           <StarIcon filled={row.starred} />
         </button>
+        )}
         <button
           type="button"
           aria-controls={contentId}
@@ -551,7 +556,8 @@ function FeedRowView({
               {row.statusLabel}
             </span>
           )}
-          <button
+          {nested ? null : (
+        <button
             type="button"
             disabled={busy}
             onClick={onArchive}
@@ -560,6 +566,7 @@ function FeedRowView({
           >
             Archive
           </button>
+        )}
         </div>
       </div>
       <div className="mt-1.5 flex min-w-0 items-end gap-2">
@@ -588,6 +595,7 @@ function FeedRowView({
             {rowLineText(row)}
           </p>
         )}
+        {nested ? null : (
         <div className="flex shrink-0 gap-2">
           <button
             ref={replyButtonRef}
@@ -611,6 +619,7 @@ function FeedRowView({
             {row.paused ? "Unpause" : "Pause"}
           </button>
         </div>
+        )}
       </div>
       <div
         id={contentId}

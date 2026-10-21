@@ -113,6 +113,10 @@ async function boundedMap<T, R>(
   return results;
 }
 
+function threadTitle(thread: Pick<ThreadListEntry, "title" | "titleFallback">): string {
+  return thread.title ?? thread.titleFallback ?? "Untitled thread";
+}
+
 export class FeedService {
   constructor(
     private readonly bb: BbPluginApi,
@@ -224,12 +228,12 @@ export class FeedService {
       managerThreadId,
       new Set(ids),
     );
-    const descendantWork = await this.descendantWork(ids);
+    const { work: descendantWork, waiting } = await this.descendantWork(threads);
     const facts: ThreadFacts[] = entries.map((entry, index) => {
       const { thread } = entry;
       return {
         id: thread.id,
-        title: thread.title ?? thread.titleFallback ?? "Untitled thread",
+        title: threadTitle(thread),
         status: thread.status,
         queuedWork: thread.queuedWork,
         managedChild: entry.managedChild,
@@ -246,10 +250,32 @@ export class FeedService {
           descendantWork.get(thread.id)?.terminalTitle ?? null,
         hasDescendantBackgroundWork:
           descendantWork.get(thread.id)?.backgroundWork ?? false,
+        hasPendingInteraction: thread.hasPendingInteraction,
+        parentTitle: null,
       };
     });
     // R18: a result seen without a summary call, for example one from before a reload, starts its call.
     for (const fact of facts) this.onResultSeen(fact.id, fact.latestCompletionSeq);
+    // A nested thread gets its own row only while it waits on the user.
+    for (const { thread, parentTitle } of waiting) {
+      facts.push({
+        id: thread.id,
+        title: threadTitle(thread),
+        status: thread.status,
+        queuedWork: thread.queuedWork,
+        managedChild: false,
+        inUserManagedSection: false,
+        latestCompletionSeq: 0,
+        answeredAt: thread.latestAttentionAt,
+        hasActiveNativeTerminal: false,
+        hasBackgroundWork: false,
+        hasActiveDescendant: false,
+        descendantTerminalTitle: null,
+        hasDescendantBackgroundWork: false,
+        hasPendingInteraction: true,
+        parentTitle,
+      });
+    }
     const summaries = this.store.listSummaries(ids);
     const marks = this.store.listMarks(ids);
     const paused = this.store.listPaused(ids);
@@ -502,12 +528,15 @@ export class FeedService {
 
   /** R5: feed threads that have a running descendant. */
   /** R9: a running or starting terminal, or background work, on any descendant of each feed thread. */
-  private async descendantWork(
-    feedThreadIds: readonly string[],
-  ): Promise<Map<string, { terminalTitle: string | null; backgroundWork: boolean }>> {
+  /** Also returns each descendant that waits on the user, with its parent's title. */
+  private async descendantWork(feedThreads: readonly ThreadListEntry[]): Promise<{
+    work: Map<string, { terminalTitle: string | null; backgroundWork: boolean }>;
+    waiting: Array<{ thread: ThreadListEntry; parentTitle: string }>;
+  }> {
     const descendants: Array<{ ownerId: string; thread: ThreadListEntry }> = [];
-    let frontier = feedThreadIds.map((id) => ({ ownerId: id, threadId: id }));
-    const visited = new Set(feedThreadIds);
+    let frontier = feedThreads.map(({ id }) => ({ ownerId: id, threadId: id }));
+    const visited = new Set(feedThreads.map(({ id }) => id));
+    const titles = new Map(feedThreads.map((thread) => [thread.id, threadTitle(thread)]));
     while (frontier.length > 0) {
       const children = await boundedMap(frontier, ({ ownerId, threadId }) =>
         this.listAll({ parentThreadId: threadId, includeHidden: true }).then(
@@ -518,6 +547,7 @@ export class FeedService {
       for (const child of children.flat()) {
         if (visited.has(child.thread.id)) continue;
         visited.add(child.thread.id);
+        titles.set(child.thread.id, threadTitle(child.thread));
         descendants.push(child);
         frontier.push({ ownerId: child.ownerId, threadId: child.thread.id });
       }
@@ -543,7 +573,13 @@ export class FeedService {
         thread.activity.activeBackgroundCommandCount > 0;
       work.set(ownerId, current);
     });
-    return work;
+    const waiting = descendants
+      .filter(({ thread }) => thread.hasPendingInteraction)
+      .map(({ thread }) => ({
+        thread,
+        parentTitle: titles.get(thread.parentThreadId ?? "") ?? "Unknown thread",
+      }));
+    return { work, waiting };
   }
 
   private async activeDescendantOwners(
