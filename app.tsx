@@ -475,14 +475,18 @@ function FeedRowView({
     replySendingRef.current = true;
     setReplySending(true);
     setReplyError(null);
+    // The row can move sections and remount before the send returns; the new row must start closed.
+    writeReplyDraft(row.id, "");
+    writeRowDisclosure(row.id, { expanded: false, fingerprint });
     try {
       await onReply(text);
       restoreReplyFocus.current = true;
       setReplyDraft("");
-      writeReplyDraft(row.id, "");
       setReplyOpen(false);
       collapseDisclosure();
     } catch (cause) {
+      writeReplyDraft(row.id, text);
+      writeRowDisclosure(row.id, { expanded, fingerprint });
       setReplyError(boundedError(cause));
     } finally {
       replySendingRef.current = false;
