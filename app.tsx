@@ -18,6 +18,7 @@ import {
   useRealtimeConnectionState,
   useRpc,
   useSettings,
+  type PluginSidebarThread,
   type PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
@@ -244,7 +245,46 @@ function useQueueSnapshot(threadId: string, sectionIds: readonly string[]) {
     requestSequence.current += 1;
   }, []);
 
-  return { rpc, state, setState, refresh, supersedeRefresh };
+  // The sidebar stays current while the panel is hidden, so a remount places rows from it at once.
+  const liveState = useMemo<LoadState>(() => {
+    if (state.status !== "ready") return state;
+    const threads = new Map(sidebar.threads.map((thread) => [thread.id, thread]));
+    let changed = false;
+    const rows = state.snapshot.rows.map((row) => {
+      const next = liveRow(row, threads.get(row.id));
+      if (next !== row) changed = true;
+      return next;
+    });
+    return changed
+      ? { status: "ready", snapshot: { ...state.snapshot, rows } }
+      : state;
+  }, [sidebar.threads, state]);
+
+  return { rpc, state: liveState, setState, refresh, supersedeRefresh };
+}
+
+/** Moves a row the server placed earlier to where the live sidebar status puts it now. */
+function liveRow(
+  row: FeedRow,
+  thread: PluginSidebarThread | undefined,
+): FeedRow {
+  if (thread === undefined) return row;
+  if (thread.hasPendingInteraction) {
+    return row.section === "needs_response" &&
+      row.statusLabel === "Waiting for you"
+      ? row
+      : {
+          ...row,
+          section: "needs_response",
+          state: "needs_response",
+          statusLabel: "Waiting for you",
+        };
+  }
+  const working =
+    thread.indicator === "runtime" || thread.indicator === "working-draft";
+  return working && row.section === "needs_response"
+    ? { ...row, section: "in_progress", state: "running", statusLabel: "Active" }
+    : row;
 }
 
 interface RowDisclosureState {

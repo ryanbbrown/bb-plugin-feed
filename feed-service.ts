@@ -118,6 +118,12 @@ function threadTitle(thread: Pick<ThreadListEntry, "title" | "titleFallback">): 
 }
 
 export class FeedService {
+  /** The latest agent message per thread, keyed by the result seq it was read at. */
+  private readonly latestMessages = new Map<
+    string,
+    { seq: number; message: string | null }
+  >();
+
   constructor(
     private readonly bb: BbPluginApi,
     private readonly store: FeedStore,
@@ -505,14 +511,26 @@ export class FeedService {
         nextIndex += 1;
         const thread = threads[index];
         if (thread === undefined) return;
-        const completion = await this.latestCompletion(thread.id);
-        const terminalList = await this.bb.sdk.terminals.list({
-          scope: { kind: "thread", threadId: thread.id },
+        const [completion, terminalList] = await Promise.all([
+          this.latestCompletion(thread.id),
+          this.bb.sdk.terminals.list({
+            scope: { kind: "thread", threadId: thread.id },
+          }),
+        ]);
+        // Reading the latest message scans up to 100 events, so it runs once per result.
+        const cached = this.latestMessages.get(thread.id);
+        const latestMessage =
+          cached?.seq === completion.seq
+            ? cached.message
+            : await latestAgentMessage(this.bb.sdk, thread.id);
+        this.latestMessages.set(thread.id, {
+          seq: completion.seq,
+          message: latestMessage,
         });
         results[index] = {
           latestCompletionSeq: completion.seq,
           latestResultAt: completion.at,
-          latestMessage: await latestAgentMessage(this.bb.sdk, thread.id),
+          latestMessage,
           hasActiveNativeTerminal: terminalList.sessions.some(
             (session) =>
               session.threadId === thread.id &&
