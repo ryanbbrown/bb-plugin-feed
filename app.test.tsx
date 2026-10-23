@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadPluginApp,
   renderSlot,
@@ -14,8 +14,14 @@ const toastError = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({ toast: { error: toastError, success: toastSuccess } }));
 
-const app = await loadPluginApp(() => import("./app.js"));
-const action = app.threadPanelActions[0]!;
+let app: Awaited<ReturnType<typeof loadPluginApp>>;
+let action: (typeof app.threadPanelActions)[number];
+// The panel keeps its last snapshot in module state, so each test loads a fresh module.
+beforeEach(async () => {
+  vi.resetModules();
+  app = await loadPluginApp(() => import("./app.js"));
+  action = app.threadPanelActions[0]!;
+});
 
 function row(overrides: Partial<QueueRow> = {}): QueueRow {
   return {
