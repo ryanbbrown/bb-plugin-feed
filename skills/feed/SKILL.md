@@ -32,7 +32,9 @@ The plugin gives this thread the `feed_mark` tool and the children section ID in
 - Make a managed child (`--parent-self`) only when the user asks you to answer that thread for them.
 - Use one thread for each task. Send later instructions for that task to the same thread.
 - Spawn with a 2–3 word `--title`.
-- Pick the environment by whether the thread will edit. Investigation and read-only research run in the project checkout with `--environment` set to it. Use `--new-environment worktree` only when the thread will change files.
+- Give every new thread its own BB worktree, also for read-only work: `bb thread spawn --new-environment worktree --base-branch <ref>`. Use `main` as the ref by default. BB removes the worktree after you archive the thread.
+- For work on an existing PR branch, spawn with `--base-branch <branch>`. Tell the thread to run `git switch <branch>` first, or `git switch -c <branch> --track origin/<branch>`.
+- Never run a thread in a project's main checkout.
 - If a user message could refer to more than one thread, ask which one.
 
 ## Managed child results
