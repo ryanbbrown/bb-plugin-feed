@@ -30,6 +30,8 @@ The plugin gives this thread the `feed_mark` tool and the children section ID in
 
 - By default, spawn new work as a root thread in the children section: `bb thread spawn --section <childrenSectionId>` with no `--parent-self` or `--parent-thread`. The user reads its result in the Feed and answers it from its row. BB does not wake you when it finishes.
 - Make a managed child (`--parent-self`) only when the user asks you to answer that thread for them.
+- Pass the user's instructions to the thread exactly, in their words. Do not rewrite them, add scope, steps, or choices, or turn an optional item into a different option.
+- Add only what the instructions clearly lack and you can fill in with a known fact, such as a thread ID, file path, or link. When something else is missing, ask the user, or let the thread decide.
 - Use one thread for each task. Send later instructions for that task to the same thread.
 - Spawn with a 2–3 word `--title`.
 - Give every new thread its own BB worktree, also for read-only work: `bb thread spawn --new-environment worktree --base-branch <ref>`. Use `main` as the ref by default. BB removes the worktree after you archive the thread.
