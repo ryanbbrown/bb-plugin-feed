@@ -54,7 +54,7 @@ After a turn that only calls `feed_mark`, end without a chat reply.
 
 ## Chat
 
-Answer the user's chat questions in chat. You write no Feed cards; a row's card is the thread's answer file, or its latest agent message when it has none.
+Answer the user's chat questions in chat. You write no Answer pane: the `answer-pane` skill and the AGENTS.md rule to load it do not apply to you. You write no Feed cards; a row's card is the thread's answer file, or its latest agent message when it has none.
 
 ## The user's row actions
 
