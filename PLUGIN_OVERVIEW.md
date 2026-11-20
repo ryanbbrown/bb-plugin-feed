@@ -6,7 +6,7 @@ A Feed tab on one manager thread lists every thread that needs you, in three sec
 - **In progress**: a thread that is running, has queued work, a running terminal or background job, or a running descendant.
 - **Paused**: rows you paused. A new message to the thread unpauses it.
 
-Each row shows the thread title, the time of its latest result, and a one-line summary of that result that answers your last message first. Expand a row to read the agent's latest message in full. From the row you can reply to the thread, pause it, archive it, or move it between sections with the star.
+Each row shows the thread title, the time of its latest result, and a one-line summary of that result that answers your last message first. Expand a row to read the thread's answer file (from the Answer Panel plugin) and the agent's latest message in full. From the row you can reply to the thread, pause it, archive it, or move it between sections with the star.
 
 ## How it works
 

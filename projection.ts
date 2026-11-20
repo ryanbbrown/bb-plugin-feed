@@ -1,4 +1,4 @@
-import type { FeedRow, FeedSection } from "./contract.js";
+import type { FeedAnswer, FeedRow, FeedSection } from "./contract.js";
 import type { FeedSummary } from "./store.js";
 
 export const THREAD_STATUSES = [
@@ -39,6 +39,7 @@ export interface ThreadFacts {
 export interface RowAnnotations {
   summary: FeedSummary | null;
   latestMessage: string | null;
+  answer: FeedAnswer | null;
   markSeq: number | null;
   paused: boolean;
 }
@@ -202,6 +203,7 @@ export function projectThread(
         : placement.statusLabel,
     ...summaryLine(facts.latestCompletionSeq, annotations),
     latestMessage: annotations.latestMessage,
+    answer: annotations.answer,
     starred: facts.inUserManagedSection,
     managedChild: facts.managedChild,
     paused: annotations.paused,

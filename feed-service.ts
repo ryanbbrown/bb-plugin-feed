@@ -5,9 +5,10 @@ import {
   STALE_MANAGER_MESSAGE,
   type ThreadResponse,
 } from "./backend-utils.js";
-import type { FeedRow } from "./contract.js";
+import type { FeedAnswer, FeedRow } from "./contract.js";
 import { projectFeed, type ThreadFacts } from "./projection.js";
 import type { FeedStore } from "./store.js";
+import { readAnswer } from "./answers.js";
 import { latestAgentMessage } from "./summaries.js";
 
 type ThreadListEntry = Awaited<
@@ -118,10 +119,10 @@ function threadTitle(thread: Pick<ThreadListEntry, "title" | "titleFallback">): 
 }
 
 export class FeedService {
-  /** The latest agent message per thread, keyed by the result seq it was read at. */
+  /** The latest agent message and answer file per thread, keyed by the result seq they were read at. */
   private readonly latestMessages = new Map<
     string,
-    { seq: number; message: string | null }
+    { seq: number; message: string | null; answer: FeedAnswer | null }
   >();
 
   constructor(
@@ -292,6 +293,7 @@ export class FeedService {
         summary: summaries.get(threadId) ?? null,
         latestMessage:
           runtimeFacts[ids.indexOf(threadId)]?.latestMessage ?? null,
+        answer: runtimeFacts[ids.indexOf(threadId)]?.answer ?? null,
         markSeq: marks.get(threadId) ?? null,
         paused: paused.has(threadId),
       })),
@@ -495,6 +497,7 @@ export class FeedService {
       latestCompletionSeq: number;
       latestResultAt: number | null;
       latestMessage: string | null;
+      answer: FeedAnswer | null;
       hasActiveNativeTerminal: boolean;
     }>
   > {
@@ -502,6 +505,7 @@ export class FeedService {
       latestCompletionSeq: number;
       latestResultAt: number | null;
       latestMessage: string | null;
+      answer: FeedAnswer | null;
       hasActiveNativeTerminal: boolean;
     }>(threads.length);
     let nextIndex = 0;
@@ -519,18 +523,23 @@ export class FeedService {
         ]);
         // Reading the latest message scans up to 100 events, so it runs once per result.
         const cached = this.latestMessages.get(thread.id);
-        const latestMessage =
+        const [latestMessage, answer] =
           cached?.seq === completion.seq
-            ? cached.message
-            : await latestAgentMessage(this.bb.sdk, thread.id);
+            ? [cached.message, cached.answer]
+            : await Promise.all([
+                latestAgentMessage(this.bb.sdk, thread.id),
+                readAnswer(this.bb, thread.id),
+              ]);
         this.latestMessages.set(thread.id, {
           seq: completion.seq,
           message: latestMessage,
+          answer,
         });
         results[index] = {
           latestCompletionSeq: completion.seq,
           latestResultAt: completion.at,
           latestMessage,
+          answer,
           hasActiveNativeTerminal: terminalList.sessions.some(
             (session) =>
               session.threadId === thread.id &&

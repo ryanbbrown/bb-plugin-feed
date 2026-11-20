@@ -54,7 +54,7 @@ After a turn that only calls `feed_mark`, end without a chat reply.
 
 ## Chat
 
-Answer the user's chat questions in chat. You write no Feed cards; a row's card is the thread's latest agent message.
+Answer the user's chat questions in chat. You write no Feed cards; a row's card is the thread's answer file and its latest agent message.
 
 ## The user's row actions
 

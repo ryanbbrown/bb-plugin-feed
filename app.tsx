@@ -22,7 +22,7 @@ import {
   type PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import type { FeedRow, rpcContract } from "./contract.js";
+import type { FeedAnswer, FeedRow, rpcContract } from "./contract.js";
 
 const DISCLOSURE_STORAGE_PREFIX = "feed.row-disclosure.";
 const REPLY_DRAFT_STORAGE_PREFIX = "feed.reply-draft.";
@@ -287,13 +287,53 @@ function liveRow(
     : row;
 }
 
+/** bb's theme custom properties, so an HTML answer can use var(--foreground) and the like. */
+function themeCss(): string {
+  const style = getComputedStyle(document.documentElement);
+  const vars: string[] = [];
+  for (let i = 0; i < style.length; i++) {
+    const name = style.item(i);
+    if (name.startsWith("--")) vars.push(`${name}:${style.getPropertyValue(name)};`);
+  }
+  return `:root{${vars.join("")}}`;
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+/** An HTML answer in a sandboxed frame, as the Answer Panel plugin shows it. */
+function HtmlAnswer({ answer }: { answer: FeedAnswer }) {
+  const srcDoc = useMemo(() => {
+    const base = new URL(answer.baseUrl, window.location.href).href;
+    const head = [
+      `<base href="${escapeAttribute(base)}">`,
+      `<style>${themeCss()}html{color-scheme:light dark}body{margin:0;padding:12px;color:var(--foreground);font-family:system-ui,sans-serif}</style>`,
+    ].join("");
+    const match = /<head(\s[^>]*)?>/i.exec(answer.content);
+    if (match) {
+      const at = match.index + match[0].length;
+      return answer.content.slice(0, at) + head + answer.content.slice(at);
+    }
+    return `<!doctype html><html><head>${head}</head><body>${answer.content}</body></html>`;
+  }, [answer]);
+  return (
+    <iframe
+      title="Answer"
+      srcDoc={srcDoc}
+      sandbox="allow-scripts allow-forms allow-popups"
+      className="block h-[28rem] w-full rounded-md border border-border/60"
+    />
+  );
+}
+
 interface RowDisclosureState {
   expanded: boolean;
   fingerprint: string;
 }
 
 function rowContentFingerprint(row: FeedRow): string {
-  return JSON.stringify([row.latestCompletionSeq, row.latestMessage]);
+  return JSON.stringify([row.latestCompletionSeq, row.latestMessage, row.answer?.sha256 ?? null]);
 }
 
 function disclosureStorageKey(threadId: string): string {
@@ -670,14 +710,24 @@ function FeedRowView({
         hidden={!expanded}
         className="mt-2.5 border-t border-border/60 pt-2.5"
       >
+        {row.answer === null ? null : row.answer.kind === "html" ? (
+          <HtmlAnswer answer={row.answer} />
+        ) : (
+          <Markdown
+            content={row.answer.content}
+            className="min-w-0 max-w-full overflow-x-hidden break-words text-sm text-foreground"
+          />
+        )}
         {row.latestMessage === null ? (
-          <p className="break-words text-sm text-muted-foreground">
-            No agent message yet
-          </p>
+          row.answer === null ? (
+            <p className="break-words text-sm text-muted-foreground">
+              No agent message yet
+            </p>
+          ) : null
         ) : (
           <Markdown
             content={row.latestMessage}
-            className="min-w-0 max-w-full overflow-x-hidden break-words text-sm text-muted-foreground"
+            className={`min-w-0 max-w-full overflow-x-hidden break-words text-sm text-muted-foreground${row.answer === null ? "" : " mt-2.5 border-t border-border/60 pt-2.5"}`}
           />
         )}
       </div>

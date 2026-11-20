@@ -33,6 +33,7 @@ function row(overrides: Partial<QueueRow> = {}): QueueRow {
     oneLine: "Needs your response",
     summarizing: false,
     latestMessage: null,
+    answer: null,
     starred: false,
     managedChild: true,
     paused: false,

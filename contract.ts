@@ -15,6 +15,19 @@ export const rowStateSchema = z.enum([
   "queued_failed",
 ]);
 
+/** The thread's answer file, read through the Answer Panel plugin. */
+export const feedAnswerSchema = z
+  .object({
+    kind: z.enum(["markdown", "html"]),
+    sha256: z.string(),
+    content: z.string(),
+    /** Base URL for relative links and assets in an HTML answer. */
+    baseUrl: z.string(),
+  })
+  .strict();
+
+export type FeedAnswer = z.infer<typeof feedAnswerSchema>;
+
 export const feedRowSchema = z
   .object({
     id: z.string(),
@@ -25,6 +38,7 @@ export const feedRowSchema = z
     oneLine: z.string().nullable(),
     summarizing: z.boolean(),
     latestMessage: z.string().nullable(),
+    answer: feedAnswerSchema.nullable(),
     starred: z.boolean(),
     managedChild: z.boolean(),
     paused: z.boolean(),
