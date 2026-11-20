@@ -22,6 +22,7 @@ import {
   type PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import { buildSrcDoc, parseFrameMessage, resolveLink } from "./answer-frame.js";
 import type { FeedAnswer, FeedRow, rpcContract } from "./contract.js";
 
 const DISCLOSURE_STORAGE_PREFIX = "feed.row-disclosure.";
@@ -287,41 +288,51 @@ function liveRow(
     : row;
 }
 
-/** bb's theme custom properties, so an HTML answer can use var(--foreground) and the like. */
-function themeCss(): string {
-  const style = getComputedStyle(document.documentElement);
-  const vars: string[] = [];
-  for (let i = 0; i < style.length; i++) {
-    const name = style.item(i);
-    if (name.startsWith("--")) vars.push(`${name}:${style.getPropertyValue(name)};`);
-  }
-  return `:root{${vars.join("")}}`;
-}
+/** An HTML answer in a sandboxed frame, as the Answer Panel plugin shows it; links open in BB. */
+function HtmlAnswer({ threadId, answer }: { threadId: string; answer: FeedAnswer }) {
+  const navigate = useBbNavigate();
+  const frame = useRef<HTMLIFrameElement>(null);
+  const scrollY = useRef(0);
+  const srcDoc = useMemo(
+    () => buildSrcDoc(answer.content, answer.baseUrl, scrollY.current),
+    [answer],
+  );
 
-function escapeAttribute(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-}
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow) return;
+      const message = parseFrameMessage(event.data);
+      if (message === null) return;
+      if (message.kind === "scroll") {
+        scrollY.current = message.y;
+        return;
+      }
+      const target = resolveLink(message.href);
+      if (target === null) return;
+      if (target.kind === "url") navigate.openUrl(target.url);
+      else if (target.kind === "thread") navigate.toThread(target.threadId);
+      else if (target.kind === "host-file") {
+        navigate.experimental_openFilePreview({
+          target: { kind: "host", hostId: answer.hostId, path: target.path },
+          location: null,
+        });
+      } else {
+        navigate.experimental_openFilePreview({
+          target: { kind: "thread-storage", threadId, path: target.path },
+          location: null,
+        });
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [navigate, threadId, answer.hostId]);
 
-/** An HTML answer in a sandboxed frame, as the Answer Panel plugin shows it. */
-function HtmlAnswer({ answer }: { answer: FeedAnswer }) {
-  const srcDoc = useMemo(() => {
-    const base = new URL(answer.baseUrl, window.location.href).href;
-    const head = [
-      `<base href="${escapeAttribute(base)}">`,
-      `<style>${themeCss()}html{color-scheme:light dark}body{margin:0;padding:12px;color:var(--foreground);font-family:system-ui,sans-serif}</style>`,
-    ].join("");
-    const match = /<head(\s[^>]*)?>/i.exec(answer.content);
-    if (match) {
-      const at = match.index + match[0].length;
-      return answer.content.slice(0, at) + head + answer.content.slice(at);
-    }
-    return `<!doctype html><html><head>${head}</head><body>${answer.content}</body></html>`;
-  }, [answer]);
   return (
     <iframe
+      ref={frame}
       title="Answer"
       srcDoc={srcDoc}
-      sandbox="allow-scripts allow-forms allow-popups"
+      sandbox="allow-scripts allow-forms"
       className="block h-[28rem] w-full rounded-md border border-border/60"
     />
   );
@@ -711,23 +722,21 @@ function FeedRowView({
         className="mt-2.5 border-t border-border/60 pt-2.5"
       >
         {row.answer === null ? null : row.answer.kind === "html" ? (
-          <HtmlAnswer answer={row.answer} />
+          <HtmlAnswer threadId={row.id} answer={row.answer} />
         ) : (
           <Markdown
             content={row.answer.content}
             className="min-w-0 max-w-full overflow-x-hidden break-words text-sm text-foreground"
           />
         )}
-        {row.latestMessage === null ? (
-          row.answer === null ? (
-            <p className="break-words text-sm text-muted-foreground">
-              No agent message yet
-            </p>
-          ) : null
+        {row.answer !== null ? null : row.latestMessage === null ? (
+          <p className="break-words text-sm text-muted-foreground">
+            No agent message yet
+          </p>
         ) : (
           <Markdown
             content={row.latestMessage}
-            className={`min-w-0 max-w-full overflow-x-hidden break-words text-sm text-muted-foreground${row.answer === null ? "" : " mt-2.5 border-t border-border/60 pt-2.5"}`}
+            className="min-w-0 max-w-full overflow-x-hidden break-words text-sm text-muted-foreground"
           />
         )}
       </div>

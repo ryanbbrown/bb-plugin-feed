@@ -12,6 +12,7 @@ const answerPanelReadSchema = z.discriminatedUnion("kind", [
       sha256: z.string(),
       content: z.string(),
       baseUrl: z.string(),
+      hostId: z.string(),
     })
     .passthrough(),
 ]);
@@ -34,6 +35,7 @@ export async function readAnswer(
       sha256: result.sha256,
       content: result.content,
       baseUrl: result.baseUrl,
+      hostId: result.hostId,
     };
   } catch {
     return null;
