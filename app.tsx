@@ -22,7 +22,7 @@ import {
   type PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
-import { buildSrcDoc, parseFrameMessage, resolveLink } from "./answer-frame.js";
+import { NativeHtml } from "./native-html.js";
 import type { FeedAnswer, FeedRow, rpcContract } from "./contract.js";
 
 const DISCLOSURE_STORAGE_PREFIX = "feed.row-disclosure.";
@@ -288,55 +288,6 @@ function liveRow(
     : row;
 }
 
-/** An HTML answer in a sandboxed frame, as the Answer Panel plugin shows it; links open in BB. */
-function HtmlAnswer({ threadId, answer }: { threadId: string; answer: FeedAnswer }) {
-  const navigate = useBbNavigate();
-  const frame = useRef<HTMLIFrameElement>(null);
-  const scrollY = useRef(0);
-  const srcDoc = useMemo(
-    () => buildSrcDoc(answer.content, answer.baseUrl, scrollY.current),
-    [answer],
-  );
-
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow) return;
-      const message = parseFrameMessage(event.data);
-      if (message === null) return;
-      if (message.kind === "scroll") {
-        scrollY.current = message.y;
-        return;
-      }
-      const target = resolveLink(message.href);
-      if (target === null) return;
-      if (target.kind === "url") navigate.openUrl(target.url);
-      else if (target.kind === "thread") navigate.toThread(target.threadId);
-      else if (target.kind === "host-file") {
-        navigate.experimental_openFilePreview({
-          target: { kind: "host", hostId: answer.hostId, path: target.path },
-          location: null,
-        });
-      } else {
-        navigate.experimental_openFilePreview({
-          target: { kind: "thread-storage", threadId, path: target.path },
-          location: null,
-        });
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [navigate, threadId, answer.hostId]);
-
-  return (
-    <iframe
-      ref={frame}
-      title="Answer"
-      srcDoc={srcDoc}
-      sandbox="allow-scripts allow-forms"
-      className="block h-[28rem] w-full rounded-md border border-border/60"
-    />
-  );
-}
 
 interface RowDisclosureState {
   expanded: boolean;
@@ -722,7 +673,12 @@ function FeedRowView({
         className="mt-2.5 border-t border-border/60 pt-2.5"
       >
         {row.answer === null ? null : row.answer.kind === "html" ? (
-          <HtmlAnswer threadId={row.id} answer={row.answer} />
+          <NativeHtml
+            content={row.answer.content}
+            baseUrl={row.answer.baseUrl}
+            threadId={row.id}
+            hostId={row.answer.hostId}
+          />
         ) : (
           <Markdown
             content={row.answer.content}
