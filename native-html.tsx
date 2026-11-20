@@ -102,14 +102,19 @@ function prepare(content: string, baseUrl: string): { body: HTMLElement; css: st
   return { body: doc.body, css, links, slots };
 }
 
+/** Opens a file link in BB's built-in preview instead of the default viewer for its type. */
+export type OpenFile = (file: { kind: "host" | "thread-storage"; path: string }) => void;
+
 function AnswerLink({
   link,
   threadId,
   hostId,
+  openFile,
 }: {
   link: Link;
   threadId: string;
   hostId: string;
+  openFile: OpenFile | undefined;
 }): ReactNode {
   const navigate = useBbNavigate();
   const children = <span dangerouslySetInnerHTML={{ __html: link.html }} />;
@@ -122,17 +127,23 @@ function AnswerLink({
         </UrlLink>
       );
     case "host-file":
+    case "storage-file": {
+      const kind = link.target.kind === "host-file" ? "host" : "thread-storage";
+      const path = link.target.path;
       return (
-        <FileLink target={{ kind: "host", hostId, path: link.target.path }} title={title}>
+        <FileLink
+          target={kind === "host" ? { kind, hostId, path } : { kind, threadId, path }}
+          title={title}
+          onClick={(event) => {
+            if (openFile === undefined || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            openFile({ kind, path });
+          }}
+        >
           {children}
         </FileLink>
       );
-    case "storage-file":
-      return (
-        <FileLink target={{ kind: "thread-storage", threadId, path: link.target.path }} title={title}>
-          {children}
-        </FileLink>
-      );
+    }
     case "thread": {
       const target = link.target.threadId;
       return (
@@ -156,11 +167,13 @@ export function NativeHtml({
   baseUrl,
   threadId,
   hostId,
+  openFile,
 }: {
   content: string;
   baseUrl: string;
   threadId: string;
   hostId: string;
+  openFile?: OpenFile;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [links, setLinks] = useState<Link[]>([]);
@@ -195,7 +208,7 @@ export function NativeHtml({
     <>
       <div ref={root} className="answer-pane-html" />
       {links.map((link, index) =>
-        createPortal(<AnswerLink link={link} threadId={threadId} hostId={hostId} />, link.slot, String(index)),
+        createPortal(<AnswerLink link={link} threadId={threadId} hostId={hostId} openFile={openFile} />, link.slot, String(index)),
       )}
     </>
   );
