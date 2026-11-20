@@ -8,6 +8,7 @@ const scan = scanPublicSdkOnly(dirname(fileURLToPath(import.meta.url)), {
     /^@testing-library\/react$/u,
     /^better-sqlite3$/u,
     /^react$/u,
+    /^react-dom$/u,
     /^sonner$/u,
     /^vitest\/config$/u,
   ],
