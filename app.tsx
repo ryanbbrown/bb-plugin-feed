@@ -678,6 +678,7 @@ function FeedRowView({
             baseUrl={row.answer.baseUrl}
             threadId={row.id}
             hostId={row.answer.hostId}
+            storageRootPath={row.answer.storageRootPath}
           />
         ) : (
           <Markdown

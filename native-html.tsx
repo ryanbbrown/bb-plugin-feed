@@ -1,7 +1,7 @@
 /** Renders an HTML answer as normal BB page content, with BB's own link components. Same as native-html.tsx in the Answer Panel plugin. */
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { UrlLink, experimental_FileLink as FileLink, useBbNavigate } from "@get-bb/plugin-sdk/app";
+import { Markdown, UrlLink, useBbNavigate, type ExperimentalLiveFileTarget } from "@get-bb/plugin-sdk/app";
 
 /** Styles plain semantic HTML in BB's theme. The answer's own CSS comes after it and wins. */
 const BASE_CSS = `
@@ -22,6 +22,7 @@ th{background:var(--muted);font-weight:600}
 blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid var(--border);color:var(--muted-foreground)}
 img,svg{max-width:100%}
 b,strong{font-weight:600}
+.answer-pane-file,.answer-pane-file *:not(svg,path){display:inline;margin:0;padding:0;font:inherit;color:inherit}
 `;
 
 const REMOVED_ELEMENTS = "script,iframe,frame,object,embed,base,meta,link,noscript,template,form";
@@ -102,19 +103,67 @@ function prepare(content: string, baseUrl: string): { body: HTMLElement; css: st
   return { body: doc.body, css, links, slots };
 }
 
-/** Opens a file link in BB's built-in preview instead of the default viewer for its type. */
-export type OpenFile = (file: { kind: "host" | "thread-storage"; path: string }) => void;
+/** Markdown link text: the link's plain text, with Markdown punctuation escaped. */
+function markdownText(html: string): string {
+  const element = document.createElement("span");
+  element.innerHTML = html;
+  const text = (element.textContent ?? "").replace(/\s+/g, " ").trim() || "link";
+  return text.replace(/[\\`*_[\]<>]/g, (match) => `\\${match}`);
+}
+
+/**
+ * A file link rendered by BB's chat Markdown, so that it has the chat's right-click menu.
+ * A plain click opens the file in its default viewer, as in chat.
+ */
+function FileAnswerLink({
+  html,
+  target,
+  absolutePath,
+  threadId,
+  storageRootPath,
+}: {
+  html: string;
+  target: ExperimentalLiveFileTarget;
+  absolutePath: string;
+  threadId: string;
+  storageRootPath: string;
+}): ReactNode {
+  const navigate = useBbNavigate();
+  return (
+    <span
+      className="answer-pane-file"
+      // Inside a plugin, the Markdown link's own click does not open the file.
+      onClickCapture={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        // React also delivers clicks from the link's context menu, which BB renders in a portal.
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        navigate.experimental_openFilePreview({ target, location: null });
+      }}
+    >
+      <Markdown
+        content={`[${markdownText(html)}](<${absolutePath}>)`}
+        experimental_document={{
+          threadId,
+          rootPath: storageRootPath,
+          target: { kind: "thread-storage", threadId, path: "answer.html" },
+        }}
+      />
+    </span>
+  );
+}
 
 function AnswerLink({
   link,
   threadId,
   hostId,
-  openFile,
+  storageRootPath,
 }: {
   link: Link;
   threadId: string;
   hostId: string;
-  openFile: OpenFile | undefined;
+  storageRootPath: string;
 }): ReactNode {
   const navigate = useBbNavigate();
   const children = <span dangerouslySetInnerHTML={{ __html: link.html }} />;
@@ -127,23 +176,25 @@ function AnswerLink({
         </UrlLink>
       );
     case "host-file":
-    case "storage-file": {
-      const kind = link.target.kind === "host-file" ? "host" : "thread-storage";
-      const path = link.target.path;
       return (
-        <FileLink
-          target={kind === "host" ? { kind, hostId, path } : { kind, threadId, path }}
-          title={title}
-          onClick={(event) => {
-            if (openFile === undefined || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            openFile({ kind, path });
-          }}
-        >
-          {children}
-        </FileLink>
+        <FileAnswerLink
+          html={link.html}
+          target={{ kind: "host", hostId, path: link.target.path }}
+          absolutePath={link.target.path}
+          threadId={threadId}
+          storageRootPath={storageRootPath}
+        />
       );
-    }
+    case "storage-file":
+      return (
+        <FileAnswerLink
+          html={link.html}
+          target={{ kind: "thread-storage", threadId, path: link.target.path }}
+          absolutePath={`${storageRootPath}/${link.target.path}`}
+          threadId={threadId}
+          storageRootPath={storageRootPath}
+        />
+      );
     case "thread": {
       const target = link.target.threadId;
       return (
@@ -167,13 +218,13 @@ export function NativeHtml({
   baseUrl,
   threadId,
   hostId,
-  openFile,
+  storageRootPath,
 }: {
   content: string;
   baseUrl: string;
   threadId: string;
   hostId: string;
-  openFile?: OpenFile;
+  storageRootPath: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [links, setLinks] = useState<Link[]>([]);
@@ -208,7 +259,7 @@ export function NativeHtml({
     <>
       <div ref={root} className="answer-pane-html" />
       {links.map((link, index) =>
-        createPortal(<AnswerLink link={link} threadId={threadId} hostId={hostId} openFile={openFile} />, link.slot, String(index)),
+        createPortal(<AnswerLink link={link} threadId={threadId} hostId={hostId} storageRootPath={storageRootPath} />, link.slot, String(index)),
       )}
     </>
   );

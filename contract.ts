@@ -23,6 +23,8 @@ export const feedAnswerSchema = z
     content: z.string(),
     /** Base URL for relative links and assets in an HTML answer. */
     baseUrl: z.string(),
+    /** The thread's absolute storage folder, for links to its files. */
+    storageRootPath: z.string(),
     /** The thread's machine, for links to absolute file paths. */
     hostId: z.string(),
   })

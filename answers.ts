@@ -12,6 +12,7 @@ const answerPanelReadSchema = z.discriminatedUnion("kind", [
       sha256: z.string(),
       content: z.string(),
       baseUrl: z.string(),
+      storageRootPath: z.string(),
       hostId: z.string(),
     })
     .passthrough(),
@@ -35,6 +36,7 @@ export async function readAnswer(
       sha256: result.sha256,
       content: result.content,
       baseUrl: result.baseUrl,
+      storageRootPath: result.storageRootPath,
       hostId: result.hostId,
     };
   } catch {
